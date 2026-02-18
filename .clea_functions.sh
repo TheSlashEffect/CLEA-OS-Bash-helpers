@@ -192,3 +192,220 @@ go-source() {
 }
 
 
+# Uses rsync to sync between artifact directory and flashing artifact location.
+# Checks for projects in "remote_host", as well as local ones, according to
+# the usual "project-index" structure.
+clea-fetch-artifacts() {
+
+    local remote_user="XXX"
+    local remote_host="XXX"
+
+    local remote_project_file="\$HOME/project-index"
+    local local_project_file="$HOME/project-index"
+    local local_artifact_file="$HOME/artifact-index"
+
+    local -a projects
+    local -a project_locations   # "Remote" or "Local"
+
+    # ----------------------------
+    # 1️⃣ Load REMOTE project-index
+    # ----------------------------
+    mapfile -t remote_projects < <(
+        ssh "$remote_user@$remote_host" \
+        "grep -v '^[[:space:]]*$' $remote_project_file 2>/dev/null"
+    )
+
+    for line in "${remote_projects[@]}"; do
+        projects+=("$line")
+        project_locations+=("Remote")
+    done
+
+    # ----------------------------
+    # 2️⃣ Load LOCAL project-index
+    # ----------------------------
+    if [[ -f "$local_project_file" ]]; then
+        mapfile -t local_projects < <(
+            grep -v '^[[:space:]]*$' "$local_project_file"
+        )
+        for line in "${local_projects[@]}"; do
+            projects+=("$line")
+            project_locations+=("Local")
+        done
+    fi
+
+    if [[ ${#projects[@]} -eq 0 ]]; then
+        echo "No projects found locally or remotely."
+        return 1
+    fi
+
+    echo "Available Projects:"
+    echo "-------------------"
+
+    for i in "${!projects[@]}"; do
+        path="${projects[$i]%%#*}"
+        comment="${projects[$i]#*#}"
+        location="${project_locations[$i]}"
+        path="$(echo "$path" | xargs)"
+        comment="$(echo "$comment" | xargs)"
+        printf "%2d) (%s) %-60s  # %s\n" \
+            $((i+1)) "$location" "$path" "$comment"
+    done
+
+    echo
+    read -p "Select project: " proj_sel
+    [[ -z "$proj_sel" ]] && return 0
+
+    if ! [[ "$proj_sel" =~ ^[0-9]+$ ]] || \
+       (( proj_sel < 1 || proj_sel > ${#projects[@]} )); then
+        echo "Invalid selection."
+        return 1
+    fi
+
+    idx=$((proj_sel-1))
+    selected_line="${projects[$idx]}"
+    location="${project_locations[$idx]}"
+
+    project_path="${selected_line%%#*}"
+    project_path="$(echo "$project_path" | xargs)"
+
+    # ----------------------------
+    # 3️⃣ Select Build
+    # ----------------------------
+    if [[ "$location" == "Remote" ]]; then
+        mapfile -t builds < <(
+            ssh "$remote_user@$remote_host" \
+            "ls -d \"$project_path\"/build_* 2>/dev/null" | sort
+        )
+    else
+        mapfile -t builds < <(
+            ls -d "$project_path"/build_* 2>/dev/null | sort
+        )
+    fi
+
+    if [[ ${#builds[@]} -eq 0 ]]; then
+        echo "No builds found."
+        return 1
+    fi
+
+    echo
+    echo "Available Builds:"
+    echo "-----------------"
+
+    for i in "${!builds[@]}"; do
+        printf "%2d) %s\n" $((i+1)) "$(basename "${builds[$i]}")"
+    done
+
+    echo
+    read -p "Select build: " build_sel
+    [[ -z "$build_sel" ]] && return 0
+
+    if ! [[ "$build_sel" =~ ^[0-9]+$ ]] || \
+       (( build_sel < 1 || build_sel > ${#builds[@]} )); then
+        echo "Invalid selection."
+        return 1
+    fi
+
+    selected_build="${builds[$((build_sel-1))]}"
+    images_path="$selected_build/tmp/deploy/images"
+
+    # ----------------------------
+    # 4️⃣ Select Image Target
+    # ----------------------------
+    if [[ "$location" == "Remote" ]]; then
+        mapfile -t images < <(
+            ssh "$remote_user@$remote_host" \
+            "ls -d \"$images_path\"/* 2>/dev/null" | sort
+        )
+    else
+        mapfile -t images < <(
+            ls -d "$images_path"/* 2>/dev/null | sort
+        )
+    fi
+
+    if [[ ${#images[@]} -eq 0 ]]; then
+        echo "No image directories found."
+        return 1
+    fi
+
+    echo
+    echo "Available Image Targets:"
+    echo "------------------------"
+
+    for i in "${!images[@]}"; do
+        printf "%2d) %s\n" $((i+1)) "$(basename "${images[$i]}")"
+    done
+
+    echo
+    read -p "Select image directory: " img_sel
+    [[ -z "$img_sel" ]] && return 0
+
+    if ! [[ "$img_sel" =~ ^[0-9]+$ ]] || \
+       (( img_sel < 1 || img_sel > ${#images[@]} )); then
+        echo "Invalid selection."
+        return 1
+    fi
+
+    # 🔹 Go one level deeper into the specific image subdirectory
+    if [[ "$location" == "Remote" ]]; then
+        remote_image_dir="${images[$((img_sel-1))]}/seco-clea-os-image/"
+    else
+        remote_image_dir="${images[$((img_sel-1))]}/seco-clea-os-image/"
+    fi
+
+    # ----------------------------
+    # 5️⃣ Select Local Artifact Destination
+    # ----------------------------
+    if [[ ! -f "$local_artifact_file" ]]; then
+        echo "Local artifact-index not found."
+        return 1
+    fi
+
+    mapfile -t artifacts < <(
+        grep -v '^[[:space:]]*$' "$local_artifact_file"
+    )
+
+    echo
+    echo "Available Local Artifact Destinations:"
+    echo "--------------------------------------"
+
+    for i in "${!artifacts[@]}"; do
+        path="${artifacts[$i]%%#*}"
+        comment="${artifacts[$i]#*#}"
+        path="$(echo "$path" | xargs)"
+        comment="$(echo "$comment" | xargs)"
+        printf "%2d) %-60s  # %s\n" \
+            $((i+1)) "$path" "$comment"
+    done
+
+    echo
+    read -p "Select local destination: " art_sel
+    [[ -z "$art_sel" ]] && return 0
+
+    if ! [[ "$art_sel" =~ ^[0-9]+$ ]] || \
+       (( art_sel < 1 || art_sel > ${#artifacts[@]} )); then
+        echo "Invalid selection."
+        return 1
+    fi
+
+    local_dest="${artifacts[$((art_sel-1))]%%#*}"
+    local_dest="$(echo "$local_dest" | xargs)"
+    mkdir -p "$local_dest"
+
+    echo
+    echo "Syncing:"
+    if [[ "$location" == "Remote" ]]; then
+        echo "  FROM: $remote_user@$remote_host:$remote_image_dir"
+        echo "  TO  : $local_dest"
+        echo
+        rsync -avz --ignore-existing \
+            "$remote_user@$remote_host:$remote_image_dir" \
+            "$local_dest"
+    else
+        echo "  FROM: $remote_image_dir"
+        echo "  TO  : $local_dest"
+        echo
+        rsync -av --ignore-existing \
+            "$remote_image_dir" \
+            "$local_dest"
+    fi
+}
