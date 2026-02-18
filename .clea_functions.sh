@@ -10,6 +10,21 @@ alias SETUP_CLEA_DOCKER='docker_user="yoctouser"; docker_workdir="workdir"; dock
     --workdir=/home/"${docker_user}"/"${docker_workdir}" \
     secodocker/clea-os-builder:latest --username="${docker_user}"'
 
+clea-init() {
+
+    # Default branch
+    local branch="${1:-scarthgap}"
+
+    echo
+    echo "Initializing CLEA OS repo with '${branch}' branch"
+    echo "---------------------------------------------------"
+    echo
+
+    repo init -u https://git.seco.com/clea-os/seco-manifest.git -b "$branch" || return 1
+    repo sync -j"$(nproc)" --fetch-submodules --no-clone-bundle
+}
+
+
 # ------------------------
 # Show projects and navigate
 # ------------------------
