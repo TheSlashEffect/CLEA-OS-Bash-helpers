@@ -1,6 +1,10 @@
 #!/bin/bash
 # Clea-OS project navigation functions and aliases
 
+if [[ -f "$HOME/.clea_config.sh" ]]; then
+    source "$HOME/.clea_config.sh"
+fi
+
 alias SETUP_CLEA_DOCKER='docker_user="yoctouser"; docker_workdir="workdir"; docker run --rm -it \
     -v "${PWD}":/home/"${docker_user}"/"${docker_workdir}" \
     -v "${HOME}"/.gitconfig:/home/"${docker_user}"/.gitconfig:ro \
@@ -202,8 +206,8 @@ clea-fetch-artifacts() {
         echo "WARNING: Local project index not found, no local projects listed"
     fi
 
-    local remote_user="xxx"
-    local remote_host="xxx"
+    local remote_user="$SECO_USER"
+    local remote_host="$REMOTE_HOST"
 
     local remote_project_file="\$HOME/project-index"
     local local_project_file="$PROJECT_INDEX"
