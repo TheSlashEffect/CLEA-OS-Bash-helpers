@@ -5,7 +5,7 @@ if [[ -f "$HOME/.clea_config.sh" ]]; then
     source "$HOME/.clea_config.sh"
 fi
 
-alias SETUP_CLEA_DOCKER='docker_user="yoctouser"; docker_workdir="workdir"; docker run --rm -it \
+alias clea-setup-docker='docker_user="yoctouser"; docker_workdir="workdir"; docker run --rm -it \
     -v "${PWD}":/home/"${docker_user}"/"${docker_workdir}" \
     -v "${HOME}"/.gitconfig:/home/"${docker_user}"/.gitconfig:ro \
     -v /tmp/.X11-unix:/tmp/.X11-unix \
@@ -32,7 +32,7 @@ clea-init() {
 # ------------------------
 # Show projects and navigate
 # ------------------------
-go-projects() {
+clea-go-projects() {
     if ! check_local_project_index; then
         return 1
     fi
@@ -113,7 +113,7 @@ go-projects() {
 # ------------------------
 # Go to source directories inside a build
 # ------------------------
-go-source() {
+clea-go-source() {
 
     # ---------------------------
     # Step 1: Find build dirs
