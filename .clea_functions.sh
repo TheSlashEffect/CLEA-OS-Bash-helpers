@@ -29,14 +29,11 @@ clea-init() {
 # Show projects and navigate
 # ------------------------
 go-projects() {
-    local index_file="$HOME/project-index"
-
-    if [[ ! -f "$index_file" ]]; then
-        echo "project-index file not found in $HOME"
+    if ! check_local_project_index; then
         return 1
     fi
 
-    mapfile -t raw_lines < "$index_file"
+    mapfile -t raw_lines < "$PROJECT_INDEX"
 
     if [[ ${#raw_lines[@]} -eq 0 ]]; then
         echo "No projects found."
@@ -196,13 +193,21 @@ go-source() {
 # Checks for projects in "remote_host", as well as local ones, according to
 # the usual "project-index" structure.
 clea-fetch-artifacts() {
+    if ! check_local_artifact_index; then
+        echo "ERROR: Local artifact index not found. Cannot operate without target directory"
+        return 1
+    fi
 
-    local remote_user="XXX"
-    local remote_host="XXX"
+    if ! check_local_project_index; then
+        echo "WARNING: Local project index not found, no local projects listed"
+    fi
+
+    local remote_user="xxx"
+    local remote_host="xxx"
 
     local remote_project_file="\$HOME/project-index"
-    local local_project_file="$HOME/project-index"
-    local local_artifact_file="$HOME/artifact-index"
+    local local_project_file="$PROJECT_INDEX"
+    local local_artifact_file="$ARTIFACT_INDEX"
 
     local -a projects
     local -a project_locations   # "Remote" or "Local"
@@ -408,4 +413,26 @@ clea-fetch-artifacts() {
             "$remote_image_dir" \
             "$local_dest"
     fi
+}
+
+: "${PROJECT_INDEX:=$HOME/project-index}"
+: "${ARTIFACT_INDEX:=$HOME/artifact-index}"
+readonly PROJECT_INDEX
+readonly ARTIFACT_INDEX
+
+# Index guards
+check_local_project_index() {
+    if [[ ! -f "$PROJECT_INDEX" ]]; then
+        echo "ERROR: Project index missing: $PROJECT_INDEX"
+        return 1
+    fi
+    return 0
+}
+
+check_local_artifact_index() {
+    if [[ ! -f "$ARTIFACT_INDEX" ]]; then
+        echo "ERROR: Artifact index missing: $ARTIFACT_INDEX"
+        return 1
+    fi
+    return 0
 }
